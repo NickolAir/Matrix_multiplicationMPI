@@ -3,6 +3,7 @@
 #include <mpi.h>
 #include <math.h>
 
+#define max(X, Y) (((X) > (Y)) ? (X) : (Y))
 #define DEFAULT 3
 
 int numprocs = 0;
@@ -50,10 +51,15 @@ void matrix_multiplication(double *A, double *B, double *Res, int N1, int N2, in
     }
 }
 
-void FreeProcess(double* A, double* B, double* Res) {
-    free(A);
-    free(B);
-    free(Res);
+void FreeProcess(double* A, double* B, double* Res, double* bA, double* bB, double* bRes, int rank) {
+    if (rank == 0) {
+        free(A);
+        free(B);
+        free(Res);
+    }
+    free(bA);
+    free(bB);
+    free(bRes);
 }
 
 void create_gridComm() {
@@ -68,6 +74,19 @@ void create_gridComm() {
     subdims[0] = 1;
     subdims[1] = 0;
     MPI_Cart_sub(gridComm, subdims, &colComm);
+}
+
+void partition(double *Matrix, double *blockMatrix, int size, int blockSize) {
+    double *rowMatrix = (double*) malloc(blockSize * size * sizeof(double));
+    if (gridCoords[1] == 0) {
+        MPI_Scatter(Matrix, blockSize * size, MPI_DOUBLE, rowMatrix,
+                    blockSize * size, MPI_DOUBLE, 0, colComm);
+    }
+    for (int i = 0; i < blockSize; i++) {
+        MPI_Scatter(&rowMatrix[i * size], blockSize, MPI_DOUBLE,
+                    &(blockMatrix[i * blockSize]), blockSize, MPI_DOUBLE, 0, rowComm);
+    }
+    free(rowMatrix);
 }
 
 int main(int argc, char *argv[]) {
@@ -85,13 +104,17 @@ int main(int argc, char *argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Status status;
 
-    int gridSize = (int)sqrt((double)numprocs);
+    int blockSize;
+    gridSize = (int)sqrt((double)numprocs);
+    int blockSizeA = max(N1, N2) / gridSize, blockSizeB = max(N2, N3) / gridSize, blockSizeRes = max(N1, N3) / gridSize;
+    double *blockA = (double*) malloc(blockSizeA * sizeof(double));
+    double *blockB = (double*) malloc(blockSizeB * sizeof(double));
+    double *blockRes = (double*) malloc(blockSizeRes * sizeof(double));
     if (numprocs != gridSize * gridSize) {
         if (rank == 0) {
             printf ("Number of processes must be a perfect square \n");
         }
-    }
-    else {
+    } else {
         if (rank == 0) {
             MatrixA = create_matrix(N1, N2);
             MatrixB = create_matrix(N2, N3);
@@ -105,6 +128,6 @@ int main(int argc, char *argv[]) {
     }
     
     MPI_Finalize();
-    FreeProcess(MatrixA, MatrixB, MatrixRes);
+    FreeProcess(MatrixA, MatrixB, MatrixRes, blockA, blockB, blockRes, rank);
     return 0;
 }
