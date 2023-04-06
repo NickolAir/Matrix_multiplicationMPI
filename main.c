@@ -6,13 +6,13 @@
 #define max(X, Y) (((X) > (Y)) ? (X) : (Y))
 #define DEFAULT 3
 
-int numprocs = 0;
-int rank = 0;
-int gridSize;
-int gridCoords[2];
-MPI_Comm gridComm;
-MPI_Comm colComm;
-MPI_Comm rowComm;
+int isPrime(int x) {
+    for (int i = 2; i <= sqrt(x); ++i) {
+        if (x % i == 0)
+            return i;
+    }
+    return x;
+}
 
 double *create_matrix (int N, int M){
     double *A = (double*) malloc(N * M * sizeof(double));
@@ -62,21 +62,21 @@ void FreeProcess(double* A, double* B, double* Res, double* bA, double* bB, doub
     free(bRes);
 }
 
-void create_gridComm() {
-    int dims[2] = {gridSize, gridSize}, periods[2] = {1, 1}, subdims[2] = {0, 1};
-
-    MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, 1, &gridComm);
-
-    MPI_Cart_coords(gridComm, rank, 2, gridCoords);
-
-    MPI_Cart_sub(gridComm, subdims, &rowComm);
-
-    subdims[0] = 1;
-    subdims[1] = 0;
-    MPI_Cart_sub(gridComm, subdims, &colComm);
+void create_gridComm(int *dims, int *periods, int *coords, int numprocs, MPI_Comm gridComm, int rank) {
+    MPI_Dims_create(numprocs, 2, dims);
+    if (rank == 0)
+        printf("%d %d\n", dims[0], dims[1]);
+    //creating communicator of 2d grid
+    MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, 0, &gridComm);
+    //getting rank of process in grid
+    MPI_Comm_rank(gridComm, &rank);
+    //get coordinates in 2d grid
+    //MPI_Cart_get(gridComm, 2, dims, periods, coords);
+    MPI_Cart_coords(gridComm, rank, 2, coords);
+    printf("rank: %d coords: %d %d\n", rank, coords[0], coords[1]);
 }
 
-void partition(double *Matrix, double *blockMatrix, int size, int blockSize) {
+/*void partition(double *Matrix, double *blockMatrix, int size, int blockSize) {
     double *rowMatrix = (double*) malloc(blockSize * size * sizeof(double));
     if (gridCoords[1] == 0) {
         MPI_Scatter(Matrix, blockSize * size, MPI_DOUBLE, rowMatrix,
@@ -89,11 +89,24 @@ void partition(double *Matrix, double *blockMatrix, int size, int blockSize) {
     free(rowMatrix);
 }
 
+void data_distribution(double *A, double *B, double *Ablock, double *Bblock, int N1, int N2, int N3, int blockSizeA,
+                       int blockSizeB) {
+    partition(A, Ablock, N1, blockSizeA);
+    partition(B, Bblock, N2, blockSizeB);
+}*/
+
 int main(int argc, char *argv[]) {
+    MPI_Comm gridComm;
+    MPI_Comm colComm;
+    MPI_Comm rowComm;
+    int dims[2] = {0, 0};
+    int periods[2] = {0, 0};
+    int coords[2] = {0, 0};
+    int numprocs, rank;
     double *MatrixA = NULL, *MatrixB = NULL, *MatrixRes = NULL;
     double start_time = 0.0, end_time;
     int N1 = DEFAULT, N2 = DEFAULT, N3 = DEFAULT;
-    if (argc >= 2){
+    if (argc >= 2) {
         N1 = atoi(argv[1]);
         N2 = atoi(argv[2]);
         N3 = atoi(argv[3]);
@@ -103,31 +116,22 @@ int main(int argc, char *argv[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Status status;
+    create_gridComm(dims, periods, coords, numprocs, gridComm, rank);
+    int rankX = coords[0], rankY = coords[1];
 
-    int blockSize;
-    gridSize = (int)sqrt((double)numprocs);
-    int blockSizeA = max(N1, N2) / gridSize, blockSizeB = max(N2, N3) / gridSize, blockSizeRes = max(N1, N3) / gridSize;
-    double *blockA = (double*) malloc(blockSizeA * sizeof(double));
-    double *blockB = (double*) malloc(blockSizeB * sizeof(double));
-    double *blockRes = (double*) malloc(blockSizeRes * sizeof(double));
-    if (numprocs != gridSize * gridSize) {
-        if (rank == 0) {
-            printf ("Number of processes must be a perfect square \n");
-        }
-    } else {
-        if (rank == 0) {
-            MatrixA = create_matrix(N1, N2);
-            MatrixB = create_matrix(N2, N3);
-            MatrixRes = create_emptyMatrix(N1, N3);
+//    double *blockA = (double *) malloc(blockSizeA * sizeof(double));
+//    double *blockB = (double *) malloc(blockSizeB * sizeof(double));
+//    double *blockRes = (double *) malloc(blockSizeRes * sizeof(double));
+    if (rank == 0){
+        MatrixA = create_matrix(N1, N2);
+        MatrixB = create_matrix(N2, N3);
+        MatrixRes = create_emptyMatrix(N1, N3);
 
-            create_gridComm();
-
-            matrix_multiplication(MatrixA, MatrixB, MatrixRes, N1, N2, N3);
-            print_matrix(MatrixRes, N1, N3);
-        }
+        //matrix_multiplication(MatrixA, MatrixB, MatrixRes, N1, N2, N3);
+        //print_matrix(MatrixRes, N1, N3);
     }
-    
+
     MPI_Finalize();
-    FreeProcess(MatrixA, MatrixB, MatrixRes, blockA, blockB, blockRes, rank);
+    //FreeProcess(MatrixA, MatrixB, MatrixRes, blockA, blockB, blockRes, rank);
     return 0;
 }
