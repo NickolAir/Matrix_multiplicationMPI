@@ -62,18 +62,35 @@ void FreeProcess(double* A, double* B, double* Res, double* bA, double* bB, doub
     free(bRes);
 }
 
-void create_gridComm(int *dims, int *periods, int *coords, int numprocs, MPI_Comm gridComm, int rank) {
+void create_gridComm(int *dims, int *periods, int *coords, int numprocs, MPI_Comm *gridComm, int rank) {
     MPI_Dims_create(numprocs, 2, dims);
     if (rank == 0)
         printf("%d %d\n", dims[0], dims[1]);
     //creating communicator of 2d grid
-    MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, 0, &gridComm);
+    MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, 0, gridComm);
     //getting rank of process in grid
-    MPI_Comm_rank(gridComm, &rank);
+    MPI_Comm_rank(*gridComm, &rank);
     //get coordinates in 2d grid
     //MPI_Cart_get(gridComm, 2, dims, periods, coords);
-    MPI_Cart_coords(gridComm, rank, 2, coords);
+    MPI_Cart_coords(*gridComm, rank, 2, coords);
     printf("rank: %d coords: %d %d\n", rank, coords[0], coords[1]);
+}
+
+void create_Comms(MPI_Comm *gridComm, MPI_Group *gridGroup, int *coords, MPI_Comm rowComms, MPI_Comm colComms, int *dims) {
+    MPI_Group buffer;
+    int cur_coord[2] = {0, 0};
+    int rank;
+    int *rankArray = (int*) malloc(dims[0] * sizeof(int));
+    for (int i = 0; i < dims[1]; ++i) {
+        for (int j = 0; j < dims[0]; ++j) {
+            cur_coord[1] = i;
+            cur_coord[0] = j;
+            MPI_Cart_rank(*gridComm, cur_coord, &rank);
+            rankArray[j] = rank;
+            printf("coords: %d %d\n", cur_coord[0], cur_coord[1]);
+        }
+        MPI_Group_incl(*gridGroup, dims[0], rankArray, &buffer);
+    }
 }
 
 /*void partition(double *Matrix, double *blockMatrix, int size, int blockSize) {
@@ -99,6 +116,7 @@ int main(int argc, char *argv[]) {
     MPI_Comm gridComm;
     MPI_Comm colComm;
     MPI_Comm rowComm;
+    MPI_Group gridGroup;
     int dims[2] = {0, 0};
     int periods[2] = {0, 0};
     int coords[2] = {0, 0};
@@ -116,8 +134,10 @@ int main(int argc, char *argv[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Status status;
-    create_gridComm(dims, periods, coords, numprocs, gridComm, rank);
+    create_gridComm(dims, periods, coords, numprocs, &gridComm, rank);
     int rankX = coords[0], rankY = coords[1];
+    MPI_Comm_group(gridComm, &gridGroup);
+    create_Comms(&gridComm, &gridGroup, coords, rowComm, colComm, dims);
 
 //    double *blockA = (double *) malloc(blockSizeA * sizeof(double));
 //    double *blockB = (double *) malloc(blockSizeB * sizeof(double));
