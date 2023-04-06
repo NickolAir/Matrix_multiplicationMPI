@@ -53,15 +53,15 @@ void matrix_multiplication(double *A, double *B, double *Res, int N1, int N2, in
     }
 }
 
-void FreeProcess(double* A, double* B, double* Res, double* bA, double* bB, double* bRes, int rank) {
+void FreeProcess(double* A, double* B, double* Res,
+                 MPI_Comm *colComm, MPI_Comm *rowComm, int rank) {
     if (rank == 0) {
         free(A);
         free(B);
         free(Res);
     }
-    free(bA);
-    free(bB);
-    free(bRes);
+    free(colComm);
+    free(rowComm);
 }
 
 void create_gridComm(int *dims, int *periods, int *coords, int numprocs, MPI_Comm *gridComm, int rank) {
@@ -168,6 +168,6 @@ int main(int argc, char *argv[]) {
     }
 
     MPI_Finalize();
-    //FreeProcess(MatrixA, MatrixB, MatrixRes, blockA, blockB, blockRes, rank);
+    FreeProcess(MatrixA, MatrixB, MatrixRes, rowComm, colComm, rank);
     return 0;
 }
