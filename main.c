@@ -16,6 +16,32 @@ int isPrime(int x) {
     return x;
 }
 
+int *decompose(int n, int k) {
+    if (n < k) {
+        printf("Невозможно разложить %d на %d слагаемых\n", n, k);
+        exit(-1);
+    }
+    int sum = k;
+    if (k == 1) {
+        int *summands = (int*) malloc(1 * sizeof(int));
+        summands[0] = n;
+        return summands;
+    }
+    int *summands = (int*) malloc(k * sizeof(int));
+    for (int i = 0; i < k; i++) {
+        summands[i] = 1;
+    }
+    for (int i = 0; i <= (k / 2) + 1; ++i) {
+        for (int j = 0; j < k; ++j) {
+            if (sum < n) {
+                summands[j]++;
+                sum++;
+            }
+        }
+    }
+    return summands;
+}
+
 double *create_matrix (int N, int M){
     double *A = (double*) malloc(N * M * sizeof(double));
     for (int i = 0; i < N * M; ++i) {
@@ -82,7 +108,8 @@ void create_Comms(MPI_Comm *gridComm, MPI_Group *gridGroup, MPI_Comm *rowComms, 
     MPI_Group buffer;
     int cur_coord[2] = {0, 0};
     int rank;
-    int *rankArray = (int*) malloc(dims[0] * sizeof(int));
+    int *rankArray = (int*) malloc(dims[Y] * sizeof(int));
+    //communicator for column
     for (int i = 0; i < dims[X]; ++i) {
         for (int j = 0; j < dims[Y]; ++j) {
             cur_coord[X] = i;
@@ -93,8 +120,8 @@ void create_Comms(MPI_Comm *gridComm, MPI_Group *gridGroup, MPI_Comm *rowComms, 
         MPI_Group_incl(*gridGroup, dims[Y], rankArray, &buffer);
         MPI_Comm_create(*gridComm, buffer, &colComms[i]);
     }
-
-    rankArray = realloc(rankArray, dims[1] * sizeof(int));
+    //communicator for rows
+    rankArray = (int*) realloc(rankArray, dims[X] * sizeof(int));
     for (int i = 0; i < dims[Y]; ++i) {
         for (int j = 0; j < dims[X]; ++j) {
             cur_coord[Y] = i;
@@ -109,8 +136,10 @@ void create_Comms(MPI_Comm *gridComm, MPI_Group *gridGroup, MPI_Comm *rowComms, 
     free(rankArray);
 }
 
-/*void partition(double *Matrix, double *blockMatrix, int size, int blockSize) {
-    double *rowMatrix = (double*) malloc(blockSize * size * sizeof(double));
+void partitionRow(double *Matrix, int N1, int N2) {
+
+
+    /*double *rowMatrix = (double*) malloc(blockSize * size * sizeof(double));
     if (gridCoords[1] == 0) {
         MPI_Scatter(Matrix, blockSize * size, MPI_DOUBLE, rowMatrix,
                     blockSize * size, MPI_DOUBLE, 0, colComm);
@@ -119,10 +148,14 @@ void create_Comms(MPI_Comm *gridComm, MPI_Group *gridGroup, MPI_Comm *rowComms, 
         MPI_Scatter(&rowMatrix[i * size], blockSize, MPI_DOUBLE,
                     &(blockMatrix[i * blockSize]), blockSize, MPI_DOUBLE, 0, rowComm);
     }
-    free(rowMatrix);
+    free(rowMatrix);*/
 }
 
-void data_distribution(double *A, double *B, double *Ablock, double *Bblock, int N1, int N2, int N3, int blockSizeA,
+void partitionCol(double *Matrix, int N2, int N3) {
+
+}
+
+/*void data_distribution(double *A, double *B, double *Ablock, double *Bblock, int N1, int N2, int N3, int blockSizeA,
                        int blockSizeB) {
     partition(A, Ablock, N1, blockSizeA);
     partition(B, Bblock, N2, blockSizeB);
@@ -162,6 +195,12 @@ int main(int argc, char *argv[]) {
         MatrixA = create_matrix(N1, N2);
         MatrixB = create_matrix(N2, N3);
         MatrixRes = create_emptyMatrix(N1, N3);
+
+        int *summands;
+        summands = decompose(7, 1);
+        for (int i = 0; i < 1; ++i) {
+            printf("%d ", summands[i]);
+        }
 
         //matrix_multiplication(MatrixA, MatrixB, MatrixRes, N1, N2, N3);
         //print_matrix(MatrixRes, N1, N3);
