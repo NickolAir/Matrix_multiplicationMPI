@@ -138,28 +138,26 @@ void create_Comms(MPI_Comm *gridComm, MPI_Group *gridGroup, MPI_Comm *rowComms, 
     free(rankArray);
 }
 
-void partitionRow(double *Matrix, int N, int K, int *summands, double *block, int rank, int dim, MPI_Comm *groupComms) {
-    int *sendNum = (int*) malloc(dim * sizeof(int));
-    int *sendOffset = (int*) malloc(dim * sizeof(int));
-    for (int i = 0; i < dim; ++i) {
-        sendNum[i] = summands[i] * N;
-        sendOffset[i] = i * summands[i] * K;
+void partition(double *Matrix, int N, int K, int *summands, double *subMatrix, int rankY, int rankX,
+               int dim, MPI_Comm *groupComms) {
+    if (rankX == 0) {
+        int *sendNum = (int*) malloc(dim * sizeof(int));
+        int *sendOffset = (int*) malloc(dim * sizeof(int));
+        for (int i = 0; i < dim; ++i) {
+            sendNum[i] = summands[i] * N;
+            sendOffset[i] = i * summands[i] * K;
+        }
+        MPI_Scatterv(Matrix, sendNum, sendOffset, MPI_DOUBLE, subMatrix,
+                     sendNum[rankX], MPI_DOUBLE, 0, groupComms[rankX]);
+        printf("SUCCESS %d %d\n", rankY, rankX);
+        free(sendNum);
+        free(sendOffset);
     }
-    MPI_Scatterv(Matrix, sendNum, sendOffset, MPI_DOUBLE, block,
-                 sendNum[rank], MPI_DOUBLE, 0, groupComms[rank]);
-    free(sendNum);
-    free(sendOffset);
 }
 
 void partitionCol(double *Matrix, int N2, int N3) {
 
 }
-
-/*void data_distribution(double *A, double *B, double *Ablock, double *Bblock, int N1, int N2, int N3, int blockSizeA,
-                       int blockSizeB) {
-    partition(A, Ablock, N1, blockSizeA);
-    partition(B, Bblock, N2, blockSizeB);
-}*/
 
 int main(int argc, char *argv[]) {
     MPI_Comm gridComm;
@@ -193,8 +191,8 @@ int main(int argc, char *argv[]) {
     summandsA = decompose(N1, dims[Y]);
     summandsB = decompose(N3, dims[X]);
 
-    double *blockRow = (double*) malloc(summandsA[rankY] * N2 * sizeof(double));
-    double *blockCol = (double*) malloc(summandsB[rankX] * N2 * sizeof(double));
+    double *subMatrixRow = (double*) malloc(summandsA[rankY] * N2 * sizeof(double));
+    double *subMatrixCol = (double*) malloc(summandsB[rankX] * N2 * sizeof(double));
 
     if (rank == 0){
         MatrixA = create_matrix(N1, N2);
@@ -205,7 +203,7 @@ int main(int argc, char *argv[]) {
         //print_matrix(MatrixRes, N1, N3);
     }
 
-    partitionRow(MatrixA, N1, N2, summandsA, blockRow, rankY, dims[0], rowComm);
+    partition(MatrixA, N1, N2, summandsA, subMatrixRow, rankY, rankX, dims[Y], colComm);
 
     MPI_Finalize();
     FreeProcess(MatrixA, MatrixB, MatrixRes, rowComm, colComm, summandsA,
