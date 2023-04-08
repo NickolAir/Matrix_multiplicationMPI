@@ -34,10 +34,20 @@ int *decompose(int n, int k) {
     return summands;
 }
 
+void transpose_matrix(double* matrix, int rows, int cols, double* result) {
+    for (int i = 0; i < rows; i++){
+        for (int j = 0; j < cols; j++){
+            result[j * rows + i] = matrix[i * cols + j];
+        }
+    }
+}
+
 double *create_matrix (int N, int M){
+    double value = 1.0;
     double *A = (double*) malloc(N * M * sizeof(double));
     for (int i = 0; i < N * M; ++i) {
-        A[i] = 1.0;
+        A[i] = value;
+        value += 1.0;
     }
     return A;
 }
@@ -131,8 +141,8 @@ void create_Comms(MPI_Comm *gridComm, MPI_Group *gridGroup, MPI_Comm *rowComms, 
     free(rankArray);
 }
 
-void partition(double *Matrix, int N, int K, int *summands, double *subMatrix, int rankY, int rankX,
-               int dim, MPI_Comm *colComm, MPI_Comm *rowComm) {
+void matrix_partition(double *Matrix, int N, int K, int *summands, double *subMatrix, int rankY, int rankX,
+                      int dim, MPI_Comm *colComm, MPI_Comm *rowComm) {
     if (rankX == 0) {
         int *sendNum = (int*) malloc(dim * sizeof(int));
         int *sendOffset = (int*) malloc(dim * sizeof(int));
@@ -148,8 +158,18 @@ void partition(double *Matrix, int N, int K, int *summands, double *subMatrix, i
     }
 }
 
-void partitionCol(double *Matrix, int N2, int N3) {
-
+void data_distribution(double *subMatrixA, double *subMatrixB, int rankY, int rankX, int *summandsA,
+                       int *summandsB, int *dims, int N2, MPI_Comm *rowComm, MPI_Comm *colComm) {
+    for (int i = 0; i < dims[0]; ++i) {
+        if (rankY == i){
+            MPI_Bcast(subMatrixA, summandsA[rankY] * N2, MPI_DOUBLE, 0, rowComm[i]);
+        }
+    }
+    for (int i = 0; i < dims[1]; ++i) {
+        if (rankX == i){
+            MPI_Bcast(subMatrixB, summandsB[rankX] * N2, MPI_DOUBLE, 0, colComm[i]);
+        }
+    }
 }
 
 int main(int argc, char *argv[]) {
@@ -188,25 +208,26 @@ int main(int argc, char *argv[]) {
     double *subMatrixB = (double*) malloc(summandsB[rankX] * N2 * sizeof(double));
 
     if (rank == 0){
-        MatrixA = create_matrix(N1, N2);
+        double *MatrixBtmp = create_matrix(N2, N3);
         MatrixB = create_matrix(N2, N3);
+        transpose_matrix(MatrixBtmp, N2, N3, MatrixB);
+        free(MatrixBtmp);
+        MatrixA = create_matrix(N1, N2);
         MatrixRes = create_emptyMatrix(N1, N3);
 
         //matrix_multiplication(MatrixA, MatrixB, MatrixRes, N1, N2, N3);
         //print_matrix(MatrixRes, N1, N3);
     }
 
-    partition(MatrixA, N1, N2, summandsA, subMatrixA, rankY, rankX, dims[Y], colComm, rowComm);
-    partition(MatrixB, N2, N3, summandsB, subMatrixB, rankX, rankY, dims[X], rowComm, colComm);
+    matrix_partition(MatrixA, N1, N2, summandsA, subMatrixA, rankY, rankX, dims[Y], colComm, rowComm);
+    matrix_partition(MatrixB, N2, N3, summandsB, subMatrixB, rankX, rankY, dims[X], rowComm, colComm);
 
-    for (int i = 0; i < dims[0]; ++i) {
-        if (rankY == i){
-            MPI_Bcast(subMatrixA, summandsA[rankY] * N2, MPI_DOUBLE, 0, rowComm[i]);
-        }
-    }
+    data_distribution(subMatrixA, subMatrixB, rankY, rankX, summandsA, summandsB, dims, N2, rowComm, colComm);
 
+    printf("Rank %d\n", rank);
     print_matrix(subMatrixA, summandsA[rankY], N2);
-    print_matrix(subMatrixB, summandsB[rankX], N3);
+//    printf("Rank %d\n", rank);
+//    print_matrix(subMatrixB, summandsB[rankX], N3);
 
     MPI_Finalize();
     FreeProcess(MatrixA, MatrixB, MatrixRes, rowComm, colComm, summandsA,
