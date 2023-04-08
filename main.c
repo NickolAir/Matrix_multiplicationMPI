@@ -8,14 +8,6 @@
 #define Y 0
 #define X 1
 
-int isPrime(int x) {
-    for (int i = 2; i <= sqrt(x); ++i) {
-        if (x % i == 0)
-            return i;
-    }
-    return x;
-}
-
 int *decompose(int n, int k) {
     if (n < k) {
         printf("Невозможно разложить %d на %d слагаемых\n", n, k);
@@ -61,10 +53,11 @@ double *create_emptyMatrix (int N, int M){
 void print_matrix(double *Matrix, int N, int M) {
     for (int i = 0; i < N * M; ++i) {
         printf("%f ", Matrix[i]);
-        if (i != 0 && (i + 1) % N == 0) {
+        if (i != 0 && (i + 1) % M == 0) {
             printf("\n");
         }
     }
+    printf("\n");
 }
 
 void matrix_multiplication(double *A, double *B, double *Res, int N1, int N2, int N3) {
@@ -95,7 +88,7 @@ void FreeProcess(double* A, double* B, double* Res, MPI_Comm *colComm, MPI_Comm 
 void create_gridComm(int *dims, int *periods, int *coords, int numprocs, MPI_Comm *gridComm, int rank) {
     MPI_Dims_create(numprocs, 2, dims);
     if (rank == 0)
-        printf("%d %d\n", dims[Y], dims[X]);
+        printf("Grid size %d x %d\n", dims[Y], dims[X]);
     //creating communicator of 2d grid
     MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, 0, gridComm);
     //getting rank of process in grid
@@ -139,7 +132,7 @@ void create_Comms(MPI_Comm *gridComm, MPI_Group *gridGroup, MPI_Comm *rowComms, 
 }
 
 void partition(double *Matrix, int N, int K, int *summands, double *subMatrix, int rankY, int rankX,
-               int dim, MPI_Comm *groupComms) {
+               int dim, MPI_Comm *colComm, MPI_Comm *rowComm) {
     if (rankX == 0) {
         int *sendNum = (int*) malloc(dim * sizeof(int));
         int *sendOffset = (int*) malloc(dim * sizeof(int));
@@ -148,8 +141,8 @@ void partition(double *Matrix, int N, int K, int *summands, double *subMatrix, i
             sendOffset[i] = i * summands[i] * K;
         }
         MPI_Scatterv(Matrix, sendNum, sendOffset, MPI_DOUBLE, subMatrix,
-                     sendNum[rankX], MPI_DOUBLE, 0, groupComms[rankX]);
-        printf("SUCCESS %d %d\n", rankY, rankX);
+                     sendNum[rankY], MPI_DOUBLE, 0, colComm[rankX]);
+        //printf("SUCCESS %d %d\n", rankY, rankX);
         free(sendNum);
         free(sendOffset);
     }
@@ -191,8 +184,8 @@ int main(int argc, char *argv[]) {
     summandsA = decompose(N1, dims[Y]);
     summandsB = decompose(N3, dims[X]);
 
-    double *subMatrixRow = (double*) malloc(summandsA[rankY] * N2 * sizeof(double));
-    double *subMatrixCol = (double*) malloc(summandsB[rankX] * N2 * sizeof(double));
+    double *subMatrixA = (double*) malloc(summandsA[rankY] * N2 * sizeof(double));
+    double *subMatrixB = (double*) malloc(summandsB[rankX] * N2 * sizeof(double));
 
     if (rank == 0){
         MatrixA = create_matrix(N1, N2);
@@ -203,7 +196,17 @@ int main(int argc, char *argv[]) {
         //print_matrix(MatrixRes, N1, N3);
     }
 
-    partition(MatrixA, N1, N2, summandsA, subMatrixRow, rankY, rankX, dims[Y], colComm);
+    partition(MatrixA, N1, N2, summandsA, subMatrixA, rankY, rankX, dims[Y], colComm, rowComm);
+    partition(MatrixB, N2, N3, summandsB, subMatrixB, rankX, rankY, dims[X], rowComm, colComm);
+
+    for (int i = 0; i < dims[0]; ++i) {
+        if (rankY == i){
+            MPI_Bcast(subMatrixA, summandsA[rankY] * N2, MPI_DOUBLE, 0, rowComm[i]);
+        }
+    }
+
+    print_matrix(subMatrixA, summandsA[rankY], N2);
+    print_matrix(subMatrixB, summandsB[rankX], N3);
 
     MPI_Finalize();
     FreeProcess(MatrixA, MatrixB, MatrixRes, rowComm, colComm, summandsA,
