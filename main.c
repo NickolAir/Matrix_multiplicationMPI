@@ -147,8 +147,8 @@ void matrix_partition(double *Matrix, int N, int K, int *summands, double *subMa
         int *sendNum = (int*) malloc(dim * sizeof(int));
         int *sendOffset = (int*) malloc(dim * sizeof(int));
         for (int i = 0; i < dim; ++i) {
-            sendNum[i] = summands[i] * N;
-            sendOffset[i] = i * summands[i] * K;
+            sendNum[i] = summands[i] * K;
+            sendOffset[i] = i * summands[i] * N;
         }
         MPI_Scatterv(Matrix, sendNum, sendOffset, MPI_DOUBLE, subMatrix,
                      sendNum[rankY], MPI_DOUBLE, 0, colComm[rankX]);
