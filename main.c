@@ -148,7 +148,11 @@ void matrix_partition(double *Matrix, int N, int K, int *summands, double *subMa
         int *sendOffset = (int*) malloc(dim * sizeof(int));
         for (int i = 0; i < dim; ++i) {
             sendNum[i] = summands[i] * K;
-            sendOffset[i] = i * summands[i] * K;
+            if (i > 0) {
+                sendOffset[i] = i * summands[i - 1] * K;
+            } else {
+                sendOffset[i] = 0;
+            }
         }
         MPI_Scatterv(Matrix, sendNum, sendOffset, MPI_DOUBLE, subMatrix,
                      sendNum[rankY], MPI_DOUBLE, 0, colComm[rankX]);
@@ -224,10 +228,10 @@ int main(int argc, char *argv[]) {
 
     data_distribution(subMatrixA, subMatrixB, rankY, rankX, summandsA, summandsB, dims, N2, rowComm, colComm);
 
-    printf("Rank %d\n", rank);
-    print_matrix(subMatrixA, summandsA[rankY], N2);
 //    printf("Rank %d\n", rank);
-//    print_matrix(subMatrixB, summandsB[rankX], N2);
+//    print_matrix(subMatrixA, summandsA[rankY], N2);
+    printf("Rank %d\n", rank);
+    print_matrix(subMatrixB, summandsB[rankX], N2);
 
     MPI_Finalize();
     FreeProcess(MatrixA, MatrixB, MatrixRes, rowComm, colComm, summandsA,
