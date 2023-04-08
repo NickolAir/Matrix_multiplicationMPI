@@ -209,7 +209,7 @@ int main(int argc, char *argv[]) {
 
     if (rank == 0){
         double *MatrixBtmp = create_matrix(N2, N3);
-        MatrixB = create_matrix(N2, N3);
+        MatrixB = create_matrix(N3, N2);
         transpose_matrix(MatrixBtmp, N2, N3, MatrixB);
         free(MatrixBtmp);
         MatrixA = create_matrix(N1, N2);
@@ -220,14 +220,14 @@ int main(int argc, char *argv[]) {
     }
 
     matrix_partition(MatrixA, N1, N2, summandsA, subMatrixA, rankY, rankX, dims[Y], colComm, rowComm);
-    matrix_partition(MatrixB, N2, N3, summandsB, subMatrixB, rankX, rankY, dims[X], rowComm, colComm);
+    matrix_partition(MatrixB, N3, N2, summandsB, subMatrixB, rankX, rankY, dims[X], rowComm, colComm);
 
     data_distribution(subMatrixA, subMatrixB, rankY, rankX, summandsA, summandsB, dims, N2, rowComm, colComm);
 
-    printf("Rank %d\n", rank);
-    print_matrix(subMatrixA, summandsA[rankY], N2);
 //    printf("Rank %d\n", rank);
-//    print_matrix(subMatrixB, summandsB[rankX], N3);
+//    print_matrix(subMatrixA, summandsA[rankY], N2);
+    printf("Rank %d\n", rank);
+    print_matrix(subMatrixB, summandsB[rankX], N2);
 
     MPI_Finalize();
     FreeProcess(MatrixA, MatrixB, MatrixRes, rowComm, colComm, summandsA,
