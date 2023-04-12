@@ -176,6 +176,40 @@ void data_distribution(double *subMatrixA, double *subMatrixB, int rankY, int ra
     }
 }
 
+void data_collection(int sizeSubmatrixA, int sizeSubmatrixB, int N3, int rank, int numprocs, int *dims, double *matrixRes,
+                     double *submatrixRes, MPI_Comm gridComm) {
+    MPI_Datatype send_submatrix, send_submatrix_resized;
+    MPI_Type_vector(sizeSubmatrixA, sizeSubmatrixB, N3, MPI_DOUBLE, &send_submatrix);
+    MPI_Type_commit(&send_submatrix);
+    MPI_Type_create_resized(send_submatrix, 0, (int)(sizeSubmatrixB * sizeof(double)), &send_submatrix_resized);
+    MPI_Type_commit(&send_submatrix_resized);
+
+    int *sendOffset, *sendNum;
+    if (rank == 0) {
+        sendOffset = calloc(numprocs, sizeof(int));
+        sendNum = calloc(numprocs, sizeof(int));
+        for (int i = 0; i < dims[Y]; ++i) {
+            for (int j = 0; j < dims[X]; ++j) {
+                sendOffset[i * dims[Y] + j] = i * dims[Y] * sizeSubmatrixA + j;
+            }
+        }
+        printf("\n");
+        for (int i = 0; i < numprocs; ++i) {
+            sendNum[i] = 1;
+        }
+    }
+
+    MPI_Gatherv(submatrixRes, sizeSubmatrixA * sizeSubmatrixB, MPI_DOUBLE, matrixRes,
+                sendNum, sendOffset, send_submatrix_resized, 0, gridComm);
+
+    MPI_Type_free(&send_submatrix);
+    MPI_Type_free(&send_submatrix_resized);
+    if (rank == 0) {
+        free(sendOffset);
+        free(sendNum);
+    }
+}
+
 int main(int argc, char *argv[]) {
     MPI_Comm gridComm;
     MPI_Group gridGroup;
@@ -210,6 +244,7 @@ int main(int argc, char *argv[]) {
 
     double *subMatrixA = (double*) malloc(summandsA[rankY] * N2 * sizeof(double));
     double *subMatrixB = (double*) malloc(summandsB[rankX] * N2 * sizeof(double));
+    double *subMatrixRes = (double*) malloc(summandsA[rankY] * summandsB[rankX] * sizeof(double));
 
     if (rank == 0){
         double *MatrixBtmp = create_matrix(N2, N3);
@@ -228,10 +263,19 @@ int main(int argc, char *argv[]) {
 
     data_distribution(subMatrixA, subMatrixB, rankY, rankX, summandsA, summandsB, dims, N2, rowComm, colComm);
 
+    matrix_multiplication(subMatrixA, subMatrixB, subMatrixRes, summandsA[rankY], N2, summandsB[rankX]);
+
+    data_collection(summandsA[rankY], summandsB[rankX], N3, rank, numprocs, dims, MatrixRes, subMatrixRes, gridComm);
+
 //    printf("Rank %d\n", rank);
 //    print_matrix(subMatrixA, summandsA[rankY], N2);
+//    printf("Rank %d\n", rank);
+//    print_matrix(subMatrixB, summandsB[rankX], N2);
     printf("Rank %d\n", rank);
-    print_matrix(subMatrixB, summandsB[rankX], N2);
+    print_matrix(subMatrixRes, summandsA[rankY], summandsB[rankX]);
+    if (rank == 0) {
+        print_matrix(MatrixRes, N1, N3);
+    }
 
     MPI_Finalize();
     FreeProcess(MatrixA, MatrixB, MatrixRes, rowComm, colComm, summandsA,
