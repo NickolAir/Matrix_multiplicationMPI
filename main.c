@@ -82,7 +82,7 @@ void matrix_multiplication(double *A, double *B, double *Res, int N1, int N2, in
     }
 }
 
-void FreeProcess(double* A, double* B, double* Res, MPI_Comm *colComm, MPI_Comm *rowComm,
+void freeProcess(double* A, double* B, double* Res, MPI_Comm *colComm, MPI_Comm *rowComm,
                  int *summandsA, int *summandsB, int rank) {
     if (rank == 0) {
         free(A);
@@ -272,7 +272,8 @@ int main(int argc, char *argv[]) {
     }
 
     MPI_Finalize();
-    FreeProcess(MatrixA, MatrixB, MatrixRes, rowComm, colComm, summandsA,
+
+    freeProcess(MatrixA, MatrixB, MatrixRes, rowComm, colComm, summandsA,
                 summandsB, rank);
     return 0;
 }
