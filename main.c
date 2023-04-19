@@ -21,7 +21,7 @@ int *decompose(int n, int k) {
     for (int i = 0; i < k; i++) {
         summands[i] = 1;
     }
-    for (int i = 0; i <= (k / 2) + 1; ++i) {
+    for (int i = 0; i <= (n / 2) + 1; ++i) {
         for (int j = 0; j < k; ++j) {
             if (sum < n) {
                 summands[j]++;
@@ -45,7 +45,7 @@ double *create_matrix (int N, int M){
     double *A = (double*) malloc(N * M * sizeof(double));
     for (int i = 0; i < N * M; ++i) {
         A[i] = value;
-        value += 1.0;
+        //value += 1.0;
     }
     return A;
 }
@@ -139,8 +139,8 @@ void create_Comms(MPI_Comm *gridComm, MPI_Group *gridGroup, MPI_Comm *rowComms, 
     free(rankArray);
 }
 
-void matrix_partition(double *Matrix, int N, int K, int *summands, double *subMatrix, int rankY, int rankX,
-                      int dim, MPI_Comm *colComm, MPI_Comm *rowComm) {
+void matrix_partition(double *Matrix, int K, int *summands, double *subMatrix, int rankY, int rankX,
+                      int dim, MPI_Comm *colComm) {
     if (rankX == 0) {
         int *sendNum = (int*) malloc(dim * sizeof(int));
         int *sendOffset = (int*) malloc(dim * sizeof(int));
@@ -173,21 +173,24 @@ void data_distribution(double *subMatrixA, double *subMatrixB, int rankY, int ra
     }
 }
 
-void data_collection(int sizeSubmatrixA, int sizeSubmatrixB, int N3, int rank, int numprocs, int *dims, double *matrixRes,
-                     double *submatrixRes, int *summandsA, MPI_Comm gridComm) {
+void data_collection(int sizeSubmatrixA, int sizeSubmatrixB, int N3, int rank, int numprocs, double *matrixRes,
+                     double *submatrixRes, int *summandsA, int*dims, MPI_Comm gridComm) {
     MPI_Datatype send_submatrix, send_submatrix_resized;
     MPI_Type_vector(sizeSubmatrixA, sizeSubmatrixB, N3, MPI_DOUBLE, &send_submatrix);
     MPI_Type_commit(&send_submatrix);
     MPI_Type_create_resized(send_submatrix, 0, (int)(sizeSubmatrixB * sizeof(double)), &send_submatrix_resized);
     MPI_Type_commit(&send_submatrix_resized);
 
-    int *sendOffset, *sendNum;
+    int *sendOffset = NULL, *sendNum = NULL;
     if (rank == 0) {
         sendOffset = calloc(numprocs, sizeof(int));
         sendNum = calloc(numprocs, sizeof(int));
         sendOffset[0] = 0;
-        for (int i = 1; i < numprocs; ++i) {
-            sendOffset[i] = summandsA[i - 1] + sendOffset[i - 1];
+        for (int i = 0; i < dims[Y]; i++) {
+            for (int j = 0; j < dims[X]; j++) {
+                sendOffset[i + j * dims[Y]] = (j * sizeSubmatrixB + sizeSubmatrixA * i * N3) / sizeSubmatrixB;
+                //printf("%d ",(j * sizeSubmatrixB + sizeSubmatrixA * i * N3) / sizeSubmatrixB);
+            }
         }
         for (int i = 0; i < numprocs; ++i) {
             sendNum[i] = 1;
@@ -224,7 +227,6 @@ int main(int argc, char *argv[]) {
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Status status;
 
     create_gridComm(dims, periods, coords, numprocs, &gridComm, rank);
     int rankX = coords[X], rankY = coords[Y];
@@ -251,18 +253,18 @@ int main(int argc, char *argv[]) {
     }
 
     start_time = MPI_Wtime();
-    matrix_partition(MatrixA, N1, N2, summandsA, subMatrixA, rankY, rankX, dims[Y], colComm, rowComm);
-    matrix_partition(MatrixB, N3, N2, summandsB, subMatrixB, rankX, rankY, dims[X], rowComm, colComm);
+    matrix_partition(MatrixA, N2, summandsA, subMatrixA, rankY, rankX, dims[Y], colComm);
+    matrix_partition(MatrixB, N2, summandsB, subMatrixB, rankX, rankY, dims[X], rowComm);
 
     data_distribution(subMatrixA, subMatrixB, rankY, rankX, summandsA, summandsB, dims, N2, rowComm, colComm);
 
     matrix_multiplication(subMatrixA, subMatrixB, subMatrixRes, summandsA[rankY], N2, summandsB[rankX]);
 
-    data_collection(summandsA[rankY], summandsB[rankX], N3, rank, numprocs, dims, MatrixRes, subMatrixRes, summandsA, gridComm);
+    data_collection(summandsA[rankY], summandsB[rankX], N3, rank, numprocs, MatrixRes, subMatrixRes, summandsA, dims, gridComm);
     end_time = MPI_Wtime();
 
-    printf("Rank %d\n", rank);
-    print_matrix(subMatrixRes, summandsA[rankY], summandsB[rankX]);
+//    printf("Rank %d\n", rank);
+//    print_matrix(subMatrixRes, summandsA[rankY], summandsB[rankX]);
     if (rank == 0) {
         print_matrix(MatrixRes, N1, N3);
         printf("Time taken: %lf\n", end_time - start_time);
